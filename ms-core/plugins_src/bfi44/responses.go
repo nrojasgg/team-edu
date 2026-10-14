@@ -1,0 +1,292 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"ms-core/internal/database"
+)
+
+func (p *BFI44Plugin) submitResponse(ctx context.Context, request map[string]interface{}) (interface{}, error) {
+	responsesCollection := database.GetCollection("bfi44_responses")
+
+	testIDStr, ok := request["test_id"].(string)
+	if !ok {
+		return nil, fmt.Errorf(errTestIDRequired)
+	}
+
+	testID, err := primitive.ObjectIDFromHex(testIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid test_id: %v", err)
+	}
+
+	var answers []BFI44Answer
+	if answersData, exists := request["answers"]; exists {
+		answersList := answersData.([]interface{})
+		for _, answerData := range answersList {
+			answerMap := answerData.(map[string]interface{})
+			answers = append(answers, BFI44Answer{
+				QuestionID: int(answerMap["question_id"].(float64)),
+				Score:      int(answerMap["score"].(float64)),
+			})
+		}
+	} else {
+		return nil, fmt.Errorf("answers are required")
+	}
+
+	inputMap := make(map[int]int)
+	for _, ans := range answers {
+		inputMap[ans.QuestionID] = ans.Score
+	}
+
+	results, err := p.Calculate(inputMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate results: %v", err)
+	}
+
+	studentID := ""
+	if sid, exists := request["student_id"]; exists {
+		if studentIDStr, ok := sid.(string); ok {
+			studentID = studentIDStr
+		}
+	}
+
+	response := BFI44Response{
+		TestID:     testID,
+		StudentID:  studentID,
+		Answers:    answers,
+		Results:    results,
+		IsComplete: true,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+
+	now := time.Now()
+	response.SubmittedAt = &now
+
+	result, err := responsesCollection.InsertOne(ctx, response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to save response: %v", err)
+	}
+
+	response.ID = result.InsertedID.(primitive.ObjectID)
+	return response, nil
+}
+
+func (p *BFI44Plugin) getResponses(ctx context.Context, request map[string]interface{}) (interface{}, error) {
+	responsesCollection := database.GetCollection("bfi44_responses")
+
+	testIDStr := request["test_id"].(string)
+	testID, err := primitive.ObjectIDFromHex(testIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	filter := bson.M{"test_id": testID}
+
+	if studentID, exists := request["student_id"]; exists {
+		filter["student_id"] = studentID
+	}
+
+	cursor, err := responsesCollection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var responses []BFI44Response
+	if err = cursor.All(ctx, &responses); err != nil {
+		return nil, err
+	}
+
+	return responses, nil
+}
+
+func (p *BFI44Plugin) getStudentResponse(ctx context.Context, request map[string]interface{}) (interface{}, error) {
+	responsesCollection := database.GetCollection("bfi44_responses")
+	testsCollection := database.GetCollection("bfi44_tests")
+
+	sectionID := request["section_id"].(string)
+	studentID := request["student_id"].(string)
+
+	testsCursor, err := testsCollection.Find(ctx, bson.M{"section_id": sectionID})
+	if err != nil {
+		return nil, err
+	}
+	defer testsCursor.Close(ctx)
+
+	var tests []BFI44Test
+	if err = testsCursor.All(ctx, &tests); err != nil {
+		return nil, err
+	}
+
+	testIDs := make([]primitive.ObjectID, len(tests))
+	for i, test := range tests {
+		testIDs[i] = test.ID
+	}
+
+	if len(testIDs) == 0 {
+		return nil, nil
+	}
+
+	var response BFI44Response
+	err = responsesCollection.FindOne(ctx, bson.M{
+		"test_id":     bson.M{"$in": testIDs},
+		"student_id":  studentID,
+		"is_complete": true,
+	}).Decode(&response)
+
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (p *BFI44Plugin) getStudentOcean(ctx context.Context, request map[string]interface{}) (interface{}, error) {
+	responsesCollection := database.GetCollection("bfi44_responses")
+	testsCollection := database.GetCollection("bfi44_tests")
+
+	sectionID, ok := request["section_id"].(string)
+	if !ok || sectionID == "" {
+		return nil, fmt.Errorf("section_id is required")
+	}
+
+	testsCursor, err := testsCollection.Find(ctx, bson.M{"section_id": sectionID})
+	if err != nil {
+		return nil, err
+	}
+	defer testsCursor.Close(ctx)
+
+	var tests []BFI44Test
+	if err = testsCursor.All(ctx, &tests); err != nil {
+		return nil, err
+	}
+
+	if len(tests) == 0 {
+		return nil, nil
+	}
+
+	testIDs := make([]primitive.ObjectID, len(tests))
+	for i, test := range tests {
+		testIDs[i] = test.ID
+	}
+
+	var response BFI44Response
+	err = responsesCollection.FindOne(ctx, bson.M{
+		"test_id":     bson.M{"$in": testIDs},
+		"is_complete": true,
+	}).Decode(&response)
+
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if response.Results.OCEANVector.Openness == 0 && response.Results.OCEANVector.Conscientiousness == 0 &&
+		response.Results.OCEANVector.Extraversion == 0 && response.Results.OCEANVector.Agreeableness == 0 &&
+		response.Results.OCEANVector.Neuroticism == 0 {
+		return nil, nil
+	}
+
+	return map[string]interface{}{
+		"openness":          response.Results.OCEANVector.Openness,
+		"conscientiousness": response.Results.OCEANVector.Conscientiousness,
+		"extraversion":      response.Results.OCEANVector.Extraversion,
+		"agreeableness":     response.Results.OCEANVector.Agreeableness,
+		"neuroticism":       response.Results.OCEANVector.Neuroticism,
+	}, nil
+}
+
+func (p *BFI44Plugin) getSectionResponses(ctx context.Context, request map[string]interface{}) (interface{}, error) {
+	responsesCollection := database.GetCollection("bfi44_responses")
+	testsCollection := database.GetCollection("bfi44_tests")
+
+	sectionID := request["section_id"].(string)
+
+	testsCursor, err := testsCollection.Find(ctx, bson.M{"section_id": sectionID})
+	if err != nil {
+		return nil, err
+	}
+	defer testsCursor.Close(ctx)
+
+	var tests []BFI44Test
+	if err = testsCursor.All(ctx, &tests); err != nil {
+		return nil, err
+	}
+
+	testIDs := make([]primitive.ObjectID, len(tests))
+	for i, test := range tests {
+		testIDs[i] = test.ID
+	}
+
+	if len(testIDs) == 0 {
+		return []BFI44Response{}, nil
+	}
+
+	findOpts := options.Find().
+		SetProjection(bson.M{"answers": 0}).
+		SetSort(bson.D{{Key: "created_at", Value: -1}})
+
+	cursor, err := responsesCollection.Find(ctx, bson.M{
+		"test_id":     bson.M{"$in": testIDs},
+		"is_complete": true,
+	}, findOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var responses []BFI44Response
+	if err = cursor.All(ctx, &responses); err != nil {
+		return nil, err
+	}
+
+	// Deduplicate by student_id, keeping the newest response
+	seen := make(map[string]bool)
+	deduped := make([]BFI44Response, 0, len(responses))
+	for _, r := range responses {
+		if !seen[r.StudentID] {
+			seen[r.StudentID] = true
+			deduped = append(deduped, r)
+		}
+	}
+
+	return deduped, nil
+}
+
+func (p *BFI44Plugin) getResults(ctx context.Context, request map[string]interface{}) (interface{}, error) {
+	responsesCollection := database.GetCollection("bfi44_responses")
+
+	testIDStr := request["test_id"].(string)
+	testID, err := primitive.ObjectIDFromHex(testIDStr)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := responsesCollection.Find(ctx, bson.M{
+		"test_id":     testID,
+		"is_complete": true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var responses []BFI44Response
+	if err = cursor.All(ctx, &responses); err != nil {
+		return nil, err
+	}
+
+	return responses, nil
+}

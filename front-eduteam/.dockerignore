@@ -1,0 +1,40 @@
+# Dependencies (reinstalled in container)
+node_modules/
+
+# Build output
+.output/
+.nuxt/
+
+# Environment and secrets
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+
+# Dev tools and CI
+.git/
+.github/
+.gitignore
+.scannerwork/
+
+# Editor and OS files
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files
+**/*.test.*
+**/*.spec.*
+vitest.config.ts
+
+# Lockfiles (bun.lockb is used — keep it; remove npm lock to avoid confusion)
+package-lock.json

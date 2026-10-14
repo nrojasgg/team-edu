@@ -1,0 +1,160 @@
+# ==============================================================================
+# TeamEdu - .gitignore
+# ==============================================================================
+
+# ==============================================================================
+# Variables de entorno y credenciales (Seguridad)
+# ==============================================================================
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Llaves privadas, certificados y credenciales
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+credentials.json
+id_rsa
+id_rsa.pub
+
+# ==============================================================================
+# Go y Binarios Compilados (Microservicios)
+# ==============================================================================
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+
+# Cobertura y reportes de prueba
+*.out
+cov*.out
+all_cov*.out
+cov*.html
+coverage.out
+
+# Directorios de compilación y empaquetado Go
+bin/
+**/bin/
+build/
+**/build/
+dist/
+**/dist/
+vendor/
+**/vendor/
+
+# Binarios Linux sin extensión generados en compilación local/WSL
+/api-gateway/main
+/ms-auth/main
+/ms-courses/main
+/ms-core/main
+/ms-notis/main
+/ms-core/server
+/ms-core/ms-core
+/ms-core/team_formation
+ms-core/c_adapters
+ms-core/OK
+
+# Plugins compilados de ms-core (se preserva la carpeta mediante .gitkeep)
+ms-core/plugins_dist/*
+!ms-core/plugins_dist/.gitkeep
+
+# ==============================================================================
+# Frontend (Nuxt 4 / Vue / Bun / Node)
+# ==============================================================================
+node_modules/
+**/node_modules/
+.nuxt/
+**/.nuxt/
+.output/
+**/.output/
+.nitro/
+**/.nitro/
+.data/
+**/.data/
+.cache/
+**/.cache/
+coverage/
+**/.nyc_output/
+.scannerwork/
+
+# Lockfile binario de Bun (el proyecto utiliza bun.lock en texto)
+bun.lockb
+**/bun.lockb
+
+# ==============================================================================
+# Logs y Archivos Temporales
+# ==============================================================================
+*.log
+**/*.log
+logs/
+**/logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+**/tmp/
+*.tmp
+*.temp
+nul
+
+# ==============================================================================
+# Backups y Almacenamiento Local de Bases de Datos
+# ==============================================================================
+backups/*
+!backups/.gitkeep
+*.archive.gz
+*.sql.gz
+*.dump
+*.sqlite
+*.db
+
+# Volúmenes persistentes de Docker en disco local
+mongo-data/
+postgres-data/
+redis-data/
+
+# ==============================================================================
+# Documentación / LaTeX (Artefactos auxiliares de compilación)
+# ==============================================================================
+documentacion/*.aux
+documentacion/*.log
+documentacion/*.out
+documentacion/*.toc
+documentacion/*.synctex.gz
+documentacion/*.bbl
+documentacion/*.blg
+documentacion/*.fls
+documentacion/*.fdb_latexmk
+
+# ==============================================================================
+# Sistema Operativo y Editores / IDEs
+# ==============================================================================
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+.idea/
+.fleet/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# VS Code: ignorar archivos de sesión local pero compartir configuraciones comunes
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json

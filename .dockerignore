@@ -1,0 +1,63 @@
+# Exclude VCS
+.git
+.gitignore
+
+# Environment and secret files
+.env
+.env.*
+credentials.json
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+id_rsa
+id_rsa.pub
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node / frontend
+node_modules/
+npm-debug.log
+yarn-error.log
+bun.lockb
+
+# Build / output artifacts
+dist/
+build/
+coverage.out
+*.out
+*.prof
+*.log
+
+# Golang vendor (if not used in build)
+vendor/
+
+# Docker and CI
+.dockerignore
+docker-compose.override.yml
+
+# Local DB or seeds that shouldn't be baked into images
+*.sqlite
+*.db
+*.sql
+seed-data.sql
+
+# Temporary files
+tmp/
+*.tmp
+
+# Plugins or local binaries (if present)
+plugins_dist/
+
+# Ignore secrets stored in workspaceStorage (VSCode)
+.vscode/**/workspaceStorage/

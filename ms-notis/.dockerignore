@@ -1,0 +1,11 @@
+.git
+.gitignore
+*.md
+*.bat
+*.ps1
+docs/
+examples/
+bin/
+coverage/
+*.test
+*_test.go

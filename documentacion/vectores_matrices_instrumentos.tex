@@ -1,0 +1,548 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    frame=single
+}
+
+\title{\textbf{Documentación Técnica}\\\large Patrones de Transformación de Instrumentos Psicosociales\\\vspace{0.5cm}\large Vectores, Matrices y la Capa de Unificación en TeamEdu}
+\author{Equipo de Desarrollo TeamEdu}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este documento describe los patrones de transformación que realizan los plugins del microservicio \texttt{ms-core} para convertir respuestas de instrumentos psicosociales en representaciones numéricas. Se identifican tres patrones distintos (\textbf{OCEAN}, \textbf{Promedio}, \textbf{Adyacencia}) y una capa de unificación (\texttt{AffinityProvider}) que permite al motor de formación de equipos combinar fuentes heterogéneas de manera agnóstica.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Visión General: Los Tres Patrones}
+%==============================================================================
+
+Todos los plugins comparten una interfaz común (\texttt{Plugin}) pero difieren en cómo transforman datos crudos en representaciones numéricas. Se identifican \textbf{tres patrones fundamentales}:
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance=1.5cm,
+    box/.style={rectangle, draw, minimum width=2.5cm, minimum height=1cm, text centered},
+    arrow/.style={-{Stealth[length=3mm]}, thick}
+]
+
+% Input
+\node[box] (input) {Respuestas\\Crudas};
+
+% Pattern 1 - OCEAN
+\node[box, below left=1.5cm and 1cm of input] (ocean) {\textbf{Patrón 1}\\OCEAN};
+\node[below=0.1cm of ocean, text width=3cm, align=center, font=\small] {BFI-44\\Eneagrama\\MBTI};
+
+% Pattern 2 - Average
+\node[box, below=1.5cm of input] (avg) {\textbf{Patrón 2}\\Promedio};
+\node[below=0.1cm of avg, text width=3cm, align=center, font=\small] {Evaluación\\de Pares};
+
+% Pattern 3 - Adjacency
+\node[box, below right=1.5cm and 1cm of input] (adj) {\textbf{Patrón 3}\\Adyacencia};
+\node[below=0.1cm of adj, text width=3cm, align=center, font=\small] {Sociograma};
+
+% Outputs
+\node[box, below=0.8cm of ocean] (vec5) {$\mathbf{v} \in [0,1]^5$};
+\node[box, below=0.8cm of avg] (vec5b) {$\mathbf{\bar{r}} \in [1,4]^5$};
+\node[box, below=0.8cm of adj] (mat) {$\mathbf{A} \in \mathbb{Z}^{m \times m}$};
+
+% Unification
+\node[box, fill=yellow!20, below=2.5cm of input, xshift=0cm] (affinity) {\texttt{AffinityProvider}\\$\to [-1, 1]$};
+
+% Arrows
+\draw[arrow] (input) -- (ocean);
+\draw[arrow] (input) -- (avg);
+\draw[arrow] (input) -- (adj);
+\draw[arrow] (ocean) -- (vec5);
+\draw[arrow] (avg) -- (vec5b);
+\draw[arrow] (adj) -- (mat);
+\draw[arrow, dashed] (vec5) -- (affinity);
+\draw[arrow, dashed] (vec5b) -- (affinity);
+\draw[arrow, dashed] (mat) -- (affinity);
+
+\end{tikzpicture}
+\caption{Los tres patrones de transformación y su unificación via \texttt{AffinityProvider}}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llcc}
+\toprule
+\textbf{Patrón} & \textbf{Plugins} & \textbf{Salida} & \textbf{Rango} \\
+\midrule
+1. OCEAN & BFI-44, Eneagrama, MBTI & Vector 5D & $[0, 1]^5$ \\
+2. Promedio & Evaluación de Pares & Vector 5D & $[1, 4]^5$ \\
+3. Adyacencia & Sociograma & Matriz $m \times m$ & $\{-1, 0, +1\}$ \\
+\bottomrule
+\end{tabular}
+\caption{Resumen de patrones de transformación}
+\end{table}
+
+%==============================================================================
+\section{Patrón 1: Vector OCEAN --- Personalidad Individual}
+\label{sec:ocean}
+%==============================================================================
+
+\subsection{Descripción General}
+
+Este patrón lo implementan los plugins \textbf{BFI-44}, \textbf{Eneagrama} y \textbf{MBTI}. A pesar de tener entradas y procesos diferentes, todos producen el mismo tipo de salida: un vector normalizado $\mathbf{v}_{\text{OCEAN}} \in [0, 1]^5$.
+
+\[
+\mathbf{v}_{\text{OCEAN}} = \begin{pmatrix} O \\ C \\ E \\ A \\ N \end{pmatrix} = \begin{pmatrix} \text{Openness} \\ \text{Conscientiousness} \\ \text{Extraversion} \\ \text{Agreeableness} \\ \text{Neuroticism} \end{pmatrix}
+\]
+
+\subsection{Tipo de Salida Común: \texttt{domain.OCEANVector}}
+
+Todos los plugins comparten el mismo tipo Go definido en \texttt{internal/core/domain/ocean.go}:
+
+\begin{lstlisting}[language=Go]
+type OCEANVector struct {
+    Openness          float64 `json:"openness"`
+    Conscientiousness float64 `json:"conscientiousness"`
+    Extraversion      float64 `json:"extraversion"`
+    Agreeableness     float64 `json:"agreeableness"`
+    Neuroticism       float64 `json:"neuroticism"`
+}
+\end{lstlisting}
+
+Este tipo incluye métodos para:
+\begin{itemize}
+    \item \texttt{Validate()} --- Verifica que cada componente $\in [0, 1]$
+    \item \texttt{EuclideanDistance(other)} --- Distancia euclidiana entre dos perfiles
+    \item \texttt{CosineSimilarity(other)} --- Similitud coseno entre dos vectores
+    \item \texttt{Normalize()} --- Normaliza a longitud unitaria
+    \item \texttt{Clone()} --- Copia profunda
+\end{itemize}
+
+%------------------------------------------------------------------------------
+\subsection{BFI-44: Cálculo Directo desde Ítems}
+\label{subsec:bfi44}
+%------------------------------------------------------------------------------
+
+\textbf{Entrada}: 44 respuestas Likert $s_i \in \{1, 2, 3, 4, 5\}$
+
+\textbf{Pipeline}:
+
+\begin{enumerate}
+    \item \textbf{Reverse scoring} para ítems inversos:
+    \[
+    c_i = \begin{cases} 6 - s_i & \text{si es inverso} \\ s_i & \text{si es directo} \end{cases}
+    \]
+    
+    \item \textbf{Agrupación por dimensión} $j \in \{O, C, E, A, N\}$:
+    \[
+    C_j = \{c_i : i \in Q_j\}
+    \]
+    
+    \item \textbf{Imputación de faltantes} (si están dentro del límite de tolerancia):
+    \[
+    \hat{c}_k = \left\lfloor \frac{1}{|C_j|} \sum_{c_i \in C_j} c_i + 0.5 \right\rfloor
+    \]
+    
+    \item \textbf{Promedio por dimensión}:
+    \[
+    \bar{c}_j = \frac{1}{|C_j|} \sum_{c_i \in C_j} c_i
+    \]
+    
+    \item \textbf{Normalización}:
+    \[
+    v_j = \frac{\bar{c}_j - 1}{4}
+    \]
+\end{enumerate}
+
+\textbf{Código}: \texttt{plugins\_src/bfi44/calculator.go}
+
+%------------------------------------------------------------------------------
+\subsection{Eneagrama: Mapeo Discreto $\to$ Continuo}
+\label{subsec:enneagram}
+%------------------------------------------------------------------------------
+
+\textbf{Entrada}: 45 respuestas Likert $s_i \in \{1, 2, 3, 4, 5\}$
+
+\textbf{Pipeline}:
+
+\begin{enumerate}
+    \item \textbf{Acumulación por tipo} (cada pregunta pertenece a un tipo $t(i) \in \{1, \ldots, 9\}$):
+    \[
+    E_k = \sum_{i: t(i) = k} s_i \quad \Rightarrow \quad \mathbf{E} = (E_1, \ldots, E_9) \in \mathbb{R}^9
+    \]
+    
+    \item \textbf{Tipo dominante}:
+    \[
+    t^* = \arg\max_{k} E_k
+    \]
+    
+    \item \textbf{Mapeo discreto} a OCEAN via tabla predefinida:
+    \[
+    \mathbf{v}_{\text{OCEAN}} = \mathbf{M}_{\text{eneagrama}}[t^*]
+    \]
+\end{enumerate}
+
+\textbf{Tabla de mapeo} (filas: tipo de eneagrama):
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Tipo} & \textbf{O} & \textbf{C} & \textbf{E} & \textbf{A} & \textbf{N} \\
+\midrule
+1 (Reformador) & 0.5 & 0.8 & 0.4 & 0.6 & 0.6 \\
+2 (Ayudador) & 0.5 & 0.6 & 0.7 & 0.9 & 0.5 \\
+3 (Triunfador) & 0.5 & 0.9 & 0.8 & 0.5 & 0.4 \\
+4 (Individualista) & 0.8 & 0.4 & 0.3 & 0.6 & 0.7 \\
+5 (Investigador) & 0.9 & 0.5 & 0.2 & 0.4 & 0.5 \\
+6 (Leal) & 0.5 & 0.7 & 0.5 & 0.7 & 0.7 \\
+7 (Entusiasta) & 0.8 & 0.3 & 0.9 & 0.6 & 0.3 \\
+8 (Desafiador) & 0.5 & 0.6 & 0.8 & 0.3 & 0.4 \\
+9 (Pacificador) & 0.5 & 0.5 & 0.3 & 0.9 & 0.4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Código}: \texttt{plugins\_src/enneagram/handlers.go} (\texttt{calculateResults})
+
+%------------------------------------------------------------------------------
+\subsection{MBTI: Tabulación Dicotómica $\to$ OCEAN}
+\label{subsec:mbti}
+%------------------------------------------------------------------------------
+
+\textbf{Entrada}: 40 respuestas dicotómicas (selección A o B)
+
+\textbf{Pipeline}:
+
+\begin{enumerate}
+    \item \textbf{Tabulación por dimensión} (4 dimensiones $\times$ 10 preguntas):
+    \[
+    \text{ScoreA}_d = |\{i \in Q_d : \text{sel}_i = A\}|, \quad \text{ScoreB}_d = 10 - \text{ScoreA}_d
+    \]
+    
+    \item \textbf{Tipo MBTI} concatenando preferencias:
+    \[
+    \text{MBTI} = \text{Pref}_{EI} \cdot \text{Pref}_{SN} \cdot \text{Pref}_{TF} \cdot \text{Pref}_{JP}
+    \]
+    
+    \item \textbf{Mapeo discreto} a OCEAN via tabla de 16 tipos:
+    \[
+    \mathbf{v}_{\text{OCEAN}} = \mathbf{M}_{\text{MBTI}}[\text{MBTI}]
+    \]
+\end{enumerate}
+
+\textbf{Ejemplos de mapeo}:
+\begin{itemize}
+    \item INTJ $\to$ $(O=0.8, C=0.7, E=0.2, A=0.4, N=0.4)$
+    \item ENFP $\to$ $(O=0.9, C=0.4, E=0.9, A=0.7, N=0.5)$
+    \item ISFJ $\to$ $(O=0.4, C=0.8, E=0.3, A=0.9, N=0.5)$
+\end{itemize}
+
+\textbf{Código}: \texttt{plugins\_src/mbti/ocean.go}
+
+%==============================================================================
+\section{Patrón 2: Vector de Promedios --- Evaluación Social}
+\label{sec:average}
+%==============================================================================
+
+\subsection{Plugin Evaluación de Pares}
+
+\textbf{Entrada}: Respuestas de múltiples evaluadores a múltiples compañeros, 5 categorías, escala 1--4.
+
+\textbf{Pipeline}:
+
+\begin{enumerate}
+    \item \textbf{Recolección}: Cada evaluador $e$ evalúa a cada compañero $j$:
+    \[
+    \mathbf{r}_{e,j} = (r_{e,j,1}, \ldots, r_{e,j,5}) \in \{1, 2, 3, 4\}^5
+    \]
+    
+    \item \textbf{Agregación por evaluado y categoría}:
+    \[
+    S_{j,k} = \{r_{e,j,k} : e \in \text{Evaluadores}\}
+    \]
+    
+    \item \textbf{Promedio}:
+    \[
+    \bar{r}_{j,k} = \frac{1}{|S_{j,k}|} \sum_{s \in S_{j,k}} s
+    \]
+    
+    \item \textbf{Vector resultado}:
+    \[
+    \mathbf{\bar{r}}_j = (\bar{r}_{j,1}, \bar{r}_{j,2}, \bar{r}_{j,3}, \bar{r}_{j,4}, \bar{r}_{j,5}) \in [1, 4]^5
+    \]
+\end{enumerate}
+
+\textbf{Observación}: Este vector \textbf{no} se normaliza a $[0,1]$ como OCEAN, pero mantiene la misma estructura de 5 dimensiones, lo que permite comparaciones parciales.
+
+\textbf{Código}: \texttt{plugins\_src/peer\_evaluation/responses.go}
+
+%==============================================================================
+\section{Patrón 3: Matriz de Adyacencia --- Relaciones Sociométricas}
+\label{sec:adjacency}
+%==============================================================================
+
+\subsection{Plugin Sociograma / Compatibilidad Grupal}
+
+\textbf{Entrada}: Preferencias de cada estudiante hacia sus compañeros.
+
+\textbf{Escala triádica}:
+\[
+r_{i,j} \in \{-1, 0, +1\} \quad \text{(Rechazo, Indiferencia, Elección)}
+\]
+
+\subsection{Construcción de Matrices}
+
+Para un grupo de $m$ estudiantes, se construyen 4 matrices de adyacencia:
+
+\[
+\mathbf{A}^{+} \in \{-1, 0, +1\}^{m \times m} \quad \text{(Elección positiva)}
+\]
+\[
+\mathbf{A}^{\hat{+}} \in \{-1, 0, +1\}^{m \times m} \quad \text{(Elección percibida)}
+\]
+\[
+\mathbf{A}^{-} \in \{-1, 0, +1\}^{m \times m} \quad \text{(Rechazo)}
+\]
+\[
+\mathbf{A}^{\hat{-}} \in \{-1, 0, +1\}^{m \times m} \quad \text{(Rechazo percibido)}
+\]
+
+\subsection{Índices Derivados}
+
+\begin{itemize}
+    \item \textbf{Popularidad}: $p_i = \sum_{j \neq i} a^{+}_{ji}$
+    \item \textbf{Rechazo}: $q_i = \sum_{j \neq i} a^{-}_{ji}$
+    \item \textbf{Compatibilidad mutua}: $c_{ij} = \max(a^{+}_{ij} + a^{+}_{ji}, -1)$
+\end{itemize}
+
+\textbf{Código}: \texttt{plugins\_src/sociogram/main.go}
+
+%==============================================================================
+\section{Capa de Unificación: \texttt{AffinityProvider}}
+\label{sec:affinity}
+%==============================================================================
+
+\subsection{El Problema}
+
+Los tres patrones producen representaciones heterogéneas:
+\begin{itemize}
+    \item Patrón 1: Vector OCEAN $\in [0, 1]^5$ (tr Rasgo individual)
+    \item Patrón 2: Vector de promedios $\in [1, 4]^5$ (agregación social)
+    \item Patrón 3: Matriz de adyacencia $\in \{-1, 0, +1\}^{m \times m}$ (relaciones)
+\end{itemize}
+
+El motor de formación de equipos necesita combinar estas fuentes de manera \textbf{agnóstica} al origen de los datos.
+
+\subsection{La Solución: Interfaz \texttt{AffinityProvider}}
+
+Definida en \texttt{internal/core/affinity\_provider.go}:
+
+\begin{lstlisting}[language=Go]
+type AffinityProvider interface {
+    ProviderID() string
+    ProviderName() string
+    CalculatePairwiseAffinity(
+        ctx context.Context, 
+        personA, personB string,
+    ) (float64, error)  // Retorna: [-1.0, 1.0]
+    SupportsContext(ctx context.Context) bool
+    GetMetadata() ProviderMetadata
+}
+\end{lstlisting}
+
+\textbf{Clave}: Cada plugin implementa este interfaz y convierte su representación interna a un \textbf{score pairwise normalizado} $\in [-1, 1]$:
+
+\[
+T_p(i, j) = \text{CalculatePairwiseAffinity}(\text{plugin}_p, i, j) \in [-1, 1]
+\]
+
+\begin{itemize}
+    \item $T_p = 1.0$: Máxima compatibilidad
+    \item $T_p = 0.0$: Neutral / Sin datos
+    \item $T_p = -1.0$: Máximo rechazo
+\end{itemize}
+
+\subsection{Cómo Cada Plugin Implementa \texttt{AffinityProvider}}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llp{5cm}}
+\toprule
+\textbf{Plugin} & \textbf{Cálculo de $T_p(i,j)$} & \textbf{Justificación} \\
+\midrule
+BFI-44 & $1 - d(\mathbf{v}_i, \mathbf{v}_j) / \sqrt{5}$ & Menor distancia euclidiana = mayor compatibilidad \\
+Eneagrama & $\mathbf{M}_{\text{comp}}[t^*_i][t^*_j]$ & Tabla de compatibilidad 9$\times$9 entre tipos \\
+MBTI & $\text{Compat}(t_i, t_j)$ & Bonus por tipos complementarios \\
+Sociograma & $r_{i,j} / 1$ & Valor directo de la encuesta \\
+\bottomrule
+\end{tabular}
+\caption{Implementación de AffinityProvider por plugin}
+\end{table}
+
+%==============================================================================
+\section{Consumo: Motor de Formación de Equipos}
+\label{sec:engine}
+%==============================================================================
+
+\subsection{Estructura \texttt{TeamMember}}
+
+El motor trabaja con una representación unificada del estudiante:
+
+\begin{lstlisting}[language=Go]
+type TeamMember struct {
+    ID            string
+    Psychometrics *OCEANVector          // Patrón 1 (OCEAN)
+    Sociometry    map[string]float64    // Patrón 3 (Adyacencia)
+    RawType       map[string]interface{} // Tipos discretos originales
+}
+\end{lstlisting}
+
+\subsection{Combinación de Fuentes}
+
+El \texttt{TeamFormationEngine} combina múltiples \texttt{AffinityProvider} con pesos configurables:
+
+\[
+T_{\text{combined}}(i, j) = \frac{\sum_{p=1}^{P} \omega_p \cdot T_p(i, j)}{\sum_{p=1}^{P} \omega_p}
+\]
+
+donde $\omega_p$ es el peso del proveedor $p$.
+
+\subsection{Fórmula de Costo Relacional (Tesis)}
+
+Según la fórmula de la tesis:
+
+\[
+C'_{ij} = \frac{\sum_p \omega_p \cdot (1 - S_p \cdot T_p(i,j))}{2}
+\]
+
+\[
+S_{\text{rel}}(G) = \min\left(1, \frac{\sum_{i<j} C'_{ij}}{|G|(|G|-1)/2}\right)
+\]
+
+\[
+f_2(x) = \frac{1}{m} \sum_G S_{\text{rel}}(G)
+\]
+
+donde $S_p \in \{-1, +1\}$ es la \textbf{intencionalidad social}:
+\begin{itemize}
+    \item $S_p = +1$: Buscar armonía (afinidad positiva es buena)
+    \item $S_p = -1$: Buscar fricción controlada (diversidad es buena)
+\end{itemize}
+
+\subsection{Fitness Psicométrico (OCEAN)}
+
+La función \texttt{CalculateGroupFitness()} en \texttt{internal/core/domain/fitness.go} aplica reglas heurísticas por dimensión:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llc}
+\toprule
+\textbf{Dimensión} & \textbf{Estrategia} & \textbf{Fórmula} \\
+\midrule
+Consciencia (C) & Homogeneidad & $s_C = 1 / (1 + \sigma^2_C \times 10)$ \\
+Extraversión (E) & Heterogeneidad & $s_E = 1 - |\sigma^2_E - 0.06|$ \\
+Amabilidad (A) & Maximizar media & $s_A = \mu_A^2$ \\
+Neuroticismo (N) & Minimizar media & $s_N = 1 - \mu_N$ \\
+\bottomrule
+\end{tabular}
+\caption{Reglas heurísticas por dimensión OCEAN}
+\end{table}
+
+\[
+\text{Fitness}_{\text{psycho}} = 0.30 \cdot s_C + 0.20 \cdot s_E + 0.20 \cdot s_A + 0.30 \cdot s_N
+\]
+
+\subsection{Fitness Sociométrico (Moreno)}
+
+La función \texttt{CalculateSociometricFitness()} evalúa cohesión grupal:
+
+\[
+F_{\text{soc}} = \underbrace{\sum_{i \in G} \sum_{j \in G, j \neq i} A[i][j]}_{\text{Cohesión}} - \underbrace{P \times N_{\text{isolates}}}_{\text{Penalización aislamiento}}
+\]
+
+\textbf{Restricción dura (veto)}: Si $\exists\, i, j : A[i][j] < 0$, entonces $F_{\text{soc}} = -1000$.
+
+%==============================================================================
+\section{Resumen: Flujo Completo de Datos}
+\label{sec:flow}
+%==============================================================================
+
+\begin{enumerate}
+    \item \textbf{Recolección}: Frontend envía respuestas crudas via API Gateway
+    
+    \item \textbf{Procesamiento (Plugin)}. Cada plugin aplica su patrón:
+    \begin{itemize}
+        \item Patrón 1 (OCEAN): Respuestas $\to$ reverse scoring $\to$ agrupación $\to$ normalización $\to$ $\mathbf{v} \in [0,1]^5$
+        \item Patrón 2 (Promedio): Respuestas $\to$ agregación $\to$ promedios $\to$ $\mathbf{\bar{r}} \in [1,4]^5$
+        \item Patrón 3 (Adyacencia): Preferencias $\to$ matrices $\to$ $\mathbf{A} \in \{-1,0,1\}^{m \times m}$
+    \end{itemize}
+    
+    \item \textbf{Almacenamiento}: Vectores/matrices se guardan en MongoDB
+    
+    \item \textbf{Unificación}: Cada plugin expone \texttt{AffinityProvider} con $T_p(i,j) \in [-1, 1]$
+    
+    \item \textbf{Optimización}: \texttt{TeamFormationEngine} combina fuentes con pesos y ejecuta algoritmo genético/greedy
+    
+    \item \textbf{Evaluación}: Se calcula fitness psicométrico (OCEAN) + fitness sociométrico (Moreno)
+\end{enumerate}
+
+%==============================================================================
+\section{Código Fuente de Referencia}
+\label{sec:code}
+%==============================================================================
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Componente} & \textbf{Ruta} \\
+\midrule
+Tipo OCEANVector & \texttt{internal/core/domain/ocean.go} \\
+Fitness psicométrico & \texttt{internal/core/domain/fitness.go} \\
+AffinityProvider & \texttt{internal/core/affinity\_provider.go} \\
+PluginManager & \texttt{internal/core/plugin\_manager.go} \\
+TeamFormationEngine & \texttt{internal/core/team\_formation\_engine.go} \\
+Sociometric fitness & \texttt{internal/core/sociometry.go} \\
+BFI-44 calculator & \texttt{plugins\_src/bfi44/calculator.go} \\
+Eneagrama results & \texttt{plugins\_src/enneagram/handlers.go} \\
+MBTI OCEAN mapping & \texttt{plugins\_src/mbti/ocean.go} \\
+Peer evaluation & \texttt{plugins\_src/peer\_evaluation/responses.go} \\
+Sociogram & \texttt{plugins\_src/sociogram/main.go} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}

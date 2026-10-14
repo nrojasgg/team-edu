@@ -1,0 +1,34 @@
+1. Realiza las tareas que le son asignadas dentro del grupo en los plazos requeridos. 
+Tareas
+● 1 - No cumple con las tareas asignadas.
+● 2 - Cumple parcialmente con las tareas o se retrasa.
+● 3 - Entrega los resultados de la tarea asignada en el plazo establecido.
+● 4 - La calidad de su trabajo es una notable contribución al equipo.
+
+2. Participa de forma activa en los espacios de encuentro del equipo, compartiendo la información, conocimientos y las experiencias. 
+Participación
+● 1 - Se ausenta con facilidad y su presencia es irrelevante.
+● 2 - Interviene poco, pero atiende a los requerimientos del resto.
+● 3 - Fomenta la participación y mejora la calidad de los resultados del equipo.
+● 4 - Sus aportes son fundamentales tanto para la calidad como el resultado del producto final.
+
+3. Colabora en la definición, organización y distribución de las tareas del equipo. 
+Organización
+● 1 - Se resiste a trabajar en equipo.
+● 2 - Se limita a aceptar la organización propuesta por los otros miembros.
+● 3 - Es organizado y distribuye el trabajo con eficacia.
+● 4 - Fomenta la organización del trabajo aprovechando los recursos y habilidades del equipo.
+
+4. Se orienta a la consecución de acuerdos y objetivos comunes y se compromete con ellos. 
+Compromiso
+● 1 - Persigue objetivos personales.
+● 2 - Le cuesta integrar los objetivos personales con los del equipo.
+● 3 - Promueve la definición de objetivos de manera clara e integrando al equipo en torno a los mismos.
+● 4 - Moviliza y cohesiona al equipo para alcanzar objetivos más exigentes (el equipo sobresale por su rendimiento y calidad).
+
+5. Toma en cuenta los puntos de vista de los demás y retroalimenta constructivamente. 
+Prosocialidad
+● 1 - No escucha las intervenciones de sus compañeros y las descalifica sistemáticamente (Quiere imponer sus opiniones).
+● 2 - Escucha poco, no pregunta, no se preocupa por la opinión ajena (intervenciones redundantes y poco sugerentes).
+● 3 - Fomenta el diálogo constructivo e inspira la participación de los otros miembros del equipo.
+● 4 - Integra las opiniones ajenas en una perspectiva superior, manteniendo un clima de colaboración y apoyo.

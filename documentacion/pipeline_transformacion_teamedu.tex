@@ -1,0 +1,597 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb,amssymb}
+\usepackage{mathtools}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, calc}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+}
+
+\lstset{
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    breaklines=true,
+    frame=single
+}
+
+\newtcolorbox{definitionbox}[1][]{
+    colback=blue!5!white,
+    colframe=blue!75!black,
+    fonttitle=\bfseries,
+    title=#1,
+    breakable
+}
+
+\newtcolorbox{formulaBox}[1][]{
+    colback=green!5!white,
+    colframe=green!50!black,
+    fonttitle=\bfseries,
+    title=#1,
+    breakable
+}
+
+\title{\textbf{Pipeline de Transformación de Datos Psicosociales}\\\large De la Captura Cualitativa a las Estructuras de Álgebra Lineal\\\vspace{0.3cm}\large \textsc{Team-Edu}: Documentación Formal del Módulo de Entrada de Datos}
+\author{Equipo de Desarrollo Team-Edu}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este documento formaliza el pipeline de transformación de datos del sistema \textbf{Team-Edu}, una herramienta de investigación-acción para la formación longitudinal de equipos educativos. Se define, instrumento por instrumento, la función matemática de mapeo que convierte datos cualitativos y cuantitativos de pruebas psicosociales en estructuras de álgebra lineal (escalares, vectores, matrices y tensores). Se demuestra analíticamente cómo las salidas de estas transformaciones se acoplan para constituir el input del algoritmo de agrupación multi-criterio.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Contexto y Enfoque}
+%==============================================================================
+
+\subsection{Identidad del Sistema}
+
+\textbf{Team-Edu} es la herramienta de software resultante de una línea de investigación que incluye los productos previos \emph{TeamMaker} y \emph{TeamP}. Su propósito es doble:
+
+\begin{enumerate}
+    \item \textbf{Modelo de optimización}: Formar equipos equilibrados mediante algoritmos multi-criterio.
+    \item \textbf{Investigación-Acción}: Realizar seguimiento longitudinal (trayectoria) de grupos en entornos educativos reales.
+\end{enumerate}
+
+\subsection{Criterios de Ajuste}
+
+El diseño del pipeline permite parametrizar la formación de equipos considerando el contexto educativo real a través de dos tipos de afinidad:
+
+\begin{definitionbox}[Tipos de Afinidad]
+\begin{itemize}
+    \item \textbf{Afinidades Expuestas} ($\mathbf{A}_{\text{exp}}$): Datos declarados explícitamente por los sujetos (encuestas, evaluaciones de pares, preferencias sociométricas).
+    \item \textbf{Afinidades Deducidas} ($\mathbf{A}_{\text{ded}}$): Datos derivados e inferidos a partir de constructos teóricos (perfil psicométrico,.compatibilidad de personalidad).
+\end{itemize}
+\end{definitionbox}
+
+\subsection{Enfoque Agnóstico}
+
+El pipeline es \textbf{agnóstico al instrumento}: no asumimos un formato de entrada específico. Cada plugin de entrada implementa una interfaz común que traduce sus datos internos a una representación estándar que el motor de optimización puede consumir.
+
+%==============================================================================
+\section{Marco Formal de Representación}
+%==============================================================================
+
+\subsection{Conjuntos Fundamentales}
+
+\begin{definitionbox}[Conjuntos base]
+Sea $\mathcal{P} = \{p_1, p_2, \ldots, p_n\}$ el conjunto de $n$ personas (estudiantes) en una sección.
+Sea $\mathcal{I} = \{I_1, I_2, \ldots, I_K\}$ el conjunto de $K$ instrumentos disponibles.
+Sea $\mathcal{G} = \{G_1, G_2, \ldots, G_m\}$ el conjunto de $m$ grupos formados, donde $\bigcup_{g=1}^{m} G_g = \mathcal{P}$ y $G_g \cap G_h = \emptyset$ para $g \neq h$.
+\end{definitionbox}
+
+\subsection{Taxonomía de las Estructuras Matemáticas}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llcp{5.5cm}}
+\toprule
+\textbf{Estructura} & \textbf{Símbolo} & \textbf{Dimensión} & \textbf{Uso en Team-Edu} \\
+\midrule
+Escalar & $t_{ij} \in \mathbb{R}$ & $1 \times 1$ & Score de compatibilidad entre par $(i,j)$ \\
+Vector fila & $\mathbf{v}_i \in \mathbb{R}^d$ & $1 \times d$ & Perfil de características de una persona \\
+Matriz de adyacencia & $\mathbf{A} \in \mathbb{R}^{n \times n}$ & $n \times n$ & Relaciones sociométricas persona$\times$persona \\
+Tensor de rasgos & $\boldsymbol{\mathcal{T}} \in \mathbb{R}^{n \times d \times K}$ & $n \times d \times K$ & Características multidimensionales por persona por instrumento \\
+\bottomrule
+\end{tabular}
+\caption{Taxonomía de estructuras matemáticas utilizadas}
+\end{table}
+
+%==============================================================================
+\section{Tensor de Características por Individuo}
+\label{sec:tensor}
+%==============================================================================
+
+\subsection{Definición Formal}
+
+Para cada persona $p_i \in \mathcal{P}$, se define un \textbf{tensor de características} $\boldsymbol{\tau}_i \in \mathbb{R}^{d}$ que agrega la información de todos los instrumentos aplicados:
+
+\[
+\boldsymbol{\tau}_i = \begin{pmatrix} \tau_{i,1} \\ \tau_{i,2} \\ \vdots \\ \tau_{i,d} \end{pmatrix} \in \mathbb{R}^{d}
+\]
+
+donde cada componente $\tau_{i,j}$ representa una característica normalizada de la persona $p_i$.
+
+\subsection{Composición del Tensor}
+
+El tensor se alimenta continuamente desde múltiples fuentes:
+
+\[
+\boldsymbol{\tau}_i = \underbrace{\mathbf{v}_{\text{OCEAN},i}}_{\text{Psicometría}} \oplus \underbrace{\mathbf{d}_i}_{\text{Demográficos}} \oplus \underbrace{\bar{\mathbf{r}}_i}_{\text{Evaluación de pares}} \oplus \ldots
+\]
+
+donde $\oplus$ denota la concatenación de vectores (posible que tengan dimensiones distintas).
+
+\subsection{Normalización Componente a Componente}
+
+Cada componente se normaliza independientemente al rango $[0, 1]$:
+
+\[
+\hat{\tau}_{i,j} = \frac{\tau_{i,j} - \min_{k \in \mathcal{P}} \tau_{k,j}}{\max_{k \in \mathcal{P}} \tau_{k,j} - \min_{k \in \mathcal{P}} \tau_{k,j}}
+\]
+
+Si $\max = \min$ (constante), se asigna $\hat{\tau}_{i,j} = 0.5$.
+
+%==============================================================================
+\section{Pipeline de Transformación: Instrumento por Instrumento}
+\label{sec:pipeline}
+%==============================================================================
+
+%------------------------------------------------------------------------------
+\subsection{A. Instrumentos Mono-usuario (Captura Individual)}
+\label{subsec:mono}
+%------------------------------------------------------------------------------
+
+\textbf{Definición}: Instrumentos donde cada persona responde de forma independiente, sin referenciar a otros sujetos.
+
+\subsubsection{A.1 Test de Eneagrama}
+
+\begin{formulaBox}[Función de Mapeo --- Eneagrama]
+\textbf{Entrada}: Vector de respuestas $\mathbf{s} \in \{1,2,3,4,5\}^{45}$
+
+\textbf{Paso 1 --- Acumulación por tipo}:
+\[
+E_k = \sum_{i:\, t(i)=k} s_i, \quad k \in \{1, \ldots, 9\}
+\]
+donde $t(i): \{1,\ldots,45\} \to \{1,\ldots,9\}$ es la función de asignación de pregunta a tipo de eneagrama.
+
+\textbf{Paso 2 --- Tipo dominante}:
+\[
+t^* = \arg\max_{k \in \{1,\ldots,9\}} E_k
+\]
+
+\textbf{Paso 3 --- Vector OCEAN (afinidad deducida)}:
+\[
+\mathbf{v}_{\text{OCEAN},i} = \mathbf{M}_{\text{eneagrama}}[t^*] \in [0,1]^5
+\]
+
+donde $\mathbf{M}_{\text{eneagrama}} \in \mathbb{R}^{9 \times 5}$ es la matriz de mapeo predefinida.
+
+\textbf{Paso 4 --- Matriz de compatibilidad persona$\times$persona}:
+\[
+\mathbf{T}^{(\text{ene})}_{ij} = \mathbf{M}_{\text{comp}}[t^*_i][t^*_j] \in \{0, 1\}
+\]
+
+donde $\mathbf{M}_{\text{comp}} \in \{0,1\}^{9 \times 9}$ es la matriz de compatibilidad binaria entre tipos de eneagrama.
+\end{formulaBox}
+
+\textbf{Estructura de salida}: Matriz $\mathbf{T}^{(\text{ene})} \in \{0,1\}^{n \times n}$ (afinidad expuesta) + Vector $\mathbf{v}_{\text{OCEAN},i} \in [0,1]^5$ (afinidad deducida).
+
+\subsubsection{A.2 Test BFI-44 (Big Five Inventory)}
+
+\begin{formulaBox}[Función de Mapeo --- BFI-44]
+\textbf{Entrada}: Vector de respuestas $\mathbf{s} \in \{1,2,3,4,5\}^{44}$
+
+\textbf{Paso 1 --- Reverse scoring}:
+\[
+c_i = \begin{cases} 6 - s_i & \text{si ítem } i \text{ es inverso} \\ s_i & \text{si ítem } i \text{ es directo} \end{cases}
+\]
+
+\textbf{Paso 2 --- Promedio por dimensión OCEAN}:
+\[
+\bar{c}_j = \frac{1}{|Q_j|} \sum_{i \in Q_j} c_i, \quad j \in \{O, C, E, A, N\}
+\]
+
+\textbf{Paso 3 --- Normalización}:
+\[
+v_j = \frac{\bar{c}_j - 1}{4}
+\]
+
+\textbf{Paso 4 --- Vector de perfil}:
+\[
+\mathbf{v}_{\text{OCEAN},i} = (v_O, v_C, v_E, v_A, v_N)^\top \in [0,1]^5
+\]
+
+\textbf{Paso 5 --- Matriz de compatibilidad persona$\times$persona}:
+\[
+\mathbf{T}^{(\text{bfi})}_{ij} = 1 - \frac{\|\mathbf{v}_{\text{OCEAN},i} - \mathbf{v}_{\text{OCEAN},j}\|_2}{\sqrt{5}} \in [0, 1]
+\]
+\end{formulaBox}
+
+\textbf{Estructura de salida}: Matriz $\mathbf{T}^{(\text{bfi})} \in [0,1]^{n \times n}$ (afinidad deducida, contina) + Vector $\mathbf{v}_{\text{OCEAN},i} \in [0,1]^5$.
+
+\subsubsection{A.3 Test MBTI (Myers-Briggs Type Indicator)}
+
+\begin{formulaBox}[Función de Mapeo --- MBTI]
+\textbf{Entrada}: Vector de selecciones $\mathbf{a} \in \{A, B\}^{40}$
+
+\textbf{Paso 1 --- Tabulación por dimensión} (4 dimensiones, 10 ítems c/u):
+\[
+\text{ScoreA}_d = |\{i \in Q_d : a_i = A\}|, \quad \text{ScoreB}_d = 10 - \text{ScoreA}_d
+\]
+
+\textbf{Paso 2 --- Tipo MBTI}:
+\[
+\text{MBTI}_i = \text{Pref}_{EI} \cdot \text{Pref}_{SN} \cdot \text{Pref}_{TF} \cdot \text{Pref}_{JP}
+\]
+donde $\text{Pref}_d = \begin{cases} A & \text{si ScoreA}_d > \text{ScoreB}_d \\ B & \text{en caso contrario} \end{cases}$
+
+\textbf{Paso 3 --- Vector OCEAN (afinidad deducida)}:
+\[
+\mathbf{v}_{\text{OCEAN},i} = \mathbf{M}_{\text{MBTI}}[\text{MBTI}_i] \in [0,1]^5
+\]
+donde $\mathbf{M}_{\text{MBTI}} \in \mathbb{R}^{16 \times 5}$ es la tabla de mapeo MBTI$\to$OCEAN.
+
+\textbf{Paso 4 --- Matriz de compatibilidad persona$\times$persona}:
+\[
+\mathbf{T}^{(\text{mbti})}_{ij} = \text{Compat}(\text{MBTI}_i, \text{MBTI}_j) \in [0, 1]
+\]
+\[
+\text{Compat}(A, B) = \frac{1}{4}\sum_{k=1}^{4} \mathbb{1}[A_k = B_k] + \text{Bonus}(A, B)
+\]
+\end{formulaBox}
+
+%------------------------------------------------------------------------------
+\subsection{B. Instrumentos Diádicos (Captura Relacional)}
+\label{subsec:dyadic}
+%------------------------------------------------------------------------------
+
+\textbf{Definición}: Instrumentos donde cada persona evalúa a sus compañeros, generando relaciones persona$\times$persona.
+
+\subsubsection{B.1 Sociograma / Compatibilidad Grupal}
+
+\begin{formulaBox}[Función de Mapeo --- Sociograma]
+\textbf{Entrada}: Para cada persona $p_i$, respuestas sobre sus compañeros:
+\[
+\mathbf{Q}^{(k)}_i = \{(j, r_{ij}^{(k)}) : j \in \mathcal{P} \setminus \{i\}\}, \quad k \in \{1,2,3,4\}
+\]
+donde $r_{ij}^{(k)} \in \{-1, 0, +1\}$ es la respuesta de $p_i$ hacia $p_j$ en la pregunta $k$.
+
+\textbf{Paso 1 --- Construcción de matrices de adyacencia}:
+\[
+\mathbf{A}^{(k)}_{ij} = r_{ij}^{(k)}, \quad \mathbf{A}^{(k)} \in \{-1, 0, +1\}^{n \times n}
+\]
+
+\textbf{Paso 2 --- Matriz combinada de afinidad}:
+\[
+\mathbf{T}^{(\text{soc})} = \frac{1}{2}\left(\mathbf{A}^{(1)} + \mathbf{A}^{(2)}\right) \in [-1, +1]^{n \times n}
+\]
+
+donde:
+\begin{itemize}
+    \item $\mathbf{A}^{(1)}$: Matriz de elección positiva (¿a quién elegirías?)
+    \item $\mathbf{A}^{(2)}$: Matriz de elección percibida (¿quién te elegiría?)
+\end{itemize}
+
+\textbf{Paso 3 --- Matriz de veto (restricción dura)}:
+\[
+\mathbf{V}_{ij} = \begin{cases} 1 & \text{si } \mathbf{A}^{(3)}_{ij} < 0 \text{ o } \mathbf{A}^{(4)}_{ij} < 0 \\ 0 & \text{en caso contrario} \end{cases}
+\]
+\end{formulaBox}
+
+\textbf{Estructura de salida}: Matriz $\mathbf{T}^{(\text{soc})} \in [-1,+1]^{n \times n}$ (afinidad expuesta) + Matriz de veto $\mathbf{V} \in \{0,1\}^{n \times n}$.
+
+\subsubsection{B.2 Evaluación de Pares}
+
+\begin{formulaBox}[Función de Mapeo --- Evaluación de Pares]
+\textbf{Entrada}: Para cada par $(e, j)$ donde $e$ evalúa a $j$, un vector de 5 categorías:
+\[
+\mathbf{r}_{e,j} = (r_{e,j,1}, r_{e,j,2}, r_{e,j,3}, r_{e,j,4}, r_{e,j,5}) \in \{1,2,3,4\}^5
+\]
+
+\textbf{Paso 1 --- Agregación por evaluado}:
+\[
+\bar{r}_{j,k} = \frac{1}{|\mathcal{E}_j|} \sum_{e \in \mathcal{E}_j} r_{e,j,k}
+\]
+donde $\mathcal{E}_j$ es el conjunto de evaluadores de $p_j$.
+
+\textbf{Paso 2 --- Vector de perfil social}:
+\[
+\bar{\mathbf{r}}_j = (\bar{r}_{j,1}, \bar{r}_{j,2}, \bar{r}_{j,3}, \bar{r}_{j,4}, \bar{r}_{j,5})^\top \in [1, 4]^5
+\]
+
+\textbf{Paso 3 --- Normalización}:
+\[
+\hat{r}_{j,k} = \frac{\bar{r}_{j,k} - 1}{3} \in [0, 1]
+\]
+
+\textbf{Paso 4 --- Matriz de compatibilidad persona$\times$persona}:
+\[
+\mathbf{T}^{(\text{peval})}_{ij} = 1 - \frac{\|\hat{\mathbf{r}}_i - \hat{\mathbf{r}}_j\|_2}{\sqrt{5}} \in [0, 1]
+\]
+\end{formulaBox}
+
+%------------------------------------------------------------------------------
+\subsection{C. Datos Demográficos y de Contexto}
+\label{subsec:demographic}
+%------------------------------------------------------------------------------
+
+\begin{formulaBox}[Función de Mapeo --- Demográficos]
+\textbf{Entrada}: Variables de contexto por persona:
+\[
+\mathbf{d}_i = (\text{sexo}_i, \text{carrera}_i, \text{edad}_i, \text{GPA}_i, \ldots)
+\]
+
+\textbf{Paso 1 --- Codificación de variables categóricas} (one-hot o Blau):
+\[
+\hat{d}_{i,k} = \begin{cases} 1 & \text{si } d_{i,k} = v \text{ (valor específico)} \\ 0 & \text{en caso contrario} \end{cases}
+\]
+
+\textbf{Paso 2 --- Normalización de variables numéricas}:
+\[
+\hat{d}_{i,k} = \frac{d_{i,k} - \min_j d_{j,k}}{\max_j d_{j,k} - \min_j d_{j,k}}
+\]
+
+\textbf{Paso 3 --- Componente del tensor}:
+\[
+\mathbf{d}_i \in [0, 1]^{d_{\text{dem}}}
+\]
+\end{formulaBox}
+
+\textbf{Los demográficos NO generan matriz persona$\times$persona}. Contribuyen directamente al tensor $\boldsymbol{\tau}_i$ y se consumen como criterios de balanceo (heterogeneidad) en la función de fitness.
+
+%==============================================================================
+\section{Acoplamiento de Estructuras: El Input del Algoritmo}
+\label{sec:coupling}
+%==============================================================================
+
+\subsection{Formalización del Problema de Agrupación}
+
+\begin{definitionbox}[Problema de Agrupación Multi-criterio]
+Dados:
+\begin{itemize}
+    \item Conjunto de personas $\mathcal{P}$ con $|\mathcal{P}| = n$
+    \item Tensor de características $\boldsymbol{\mathcal{T}} \in \mathbb{R}^{n \times d}$
+    \item Conjunto de matrices de afinidad $\{\mathbf{T}^{(1)}, \mathbf{T}^{(2)}, \ldots, \mathbf{T}^{(K)}\}$ donde $\mathbf{T}^{(k)} \in [-1,1]^{n \times n}$
+    \item Matriz de veto $\mathbf{V} \in \{0,1\}^{n \times n}$
+    \item Tamaño de grupo deseado $g$
+\end{itemize}
+
+Encontrar una partición $\mathcal{G} = \{G_1, \ldots, G_m\}$ de $\mathcal{P}$ que maximice:
+\[
+F(\mathcal{G}) = \sum_{k=1}^{K} \omega_k \cdot f_k(\mathcal{G}) + \sum_{j=1}^{d} \lambda_j \cdot h_j(\mathcal{G})
+\]
+sujeto a:
+\begin{align}
+    & G_g \cap G_h = \emptyset \quad \forall\, g \neq h \\
+    & \bigcup_{g=1}^{m} G_g = \mathcal{P} \\
+    & |G_g| \in [g_{\min}, g_{\max}] \quad \forall\, g \\
+    & \mathbf{V}_{ij} = 0 \quad \forall\, i, j \in G_g, \forall\, g \quad \text{(restricción de veto)}
+\end{align}
+\end{definitionbox}
+
+\subsection{Funciones de Afinidad $f_k$ (Pairwise)}
+
+Cada matriz de afinidad $\mathbf{T}^{(k)}$ se consume como una función de评分 pairwise:
+
+\[
+f_k(\mathcal{G}) = \frac{1}{m} \sum_{g=1}^{m} \frac{\sum_{i < j \in G_g} \mathbf{T}^{(k)}_{ij}}{|G_g|(|G_g|-1)/2}
+\]
+
+Esto calcula la \textbf{afinidad promedio intra-grupo} para el criterio $k$.
+
+\subsection{Funciones de Balanceo $h_j$ (Tensor)}
+
+Las componentes del tensor $\boldsymbol{\mathcal{T}}$ se consumen como criterios de balanceo:
+
+\[
+h_j(\mathcal{G}) = \begin{cases}
+\text{Blau}(\{d_{j,i} : i \in G_g\}) & \text{si } d_j \text{ es categórica} \\
+1 - \text{CV}(\{d_{j,i} : i \in G_g\}) & \text{si } d_j \text{ es numérica}
+\end{cases}
+\]
+
+donde Blau es el índice de heterogeneidad y CV es el coeficiente de variación.
+
+\subsection{Diagrama de Acoplamiento Completo}
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}[
+    node distance=0.8cm and 1.2cm,
+    box/.style={rectangle, draw, minimum width=2cm, minimum height=0.8cm, text centered, font=\small},
+    tensor/.style={rectangle, draw, fill=blue!10, minimum width=2.5cm, minimum height=0.8cm, text centered, font=\small},
+    matrix/.style={rectangle, draw, fill=green!10, minimum width=2.5cm, minimum height=0.8cm, text centered, font=\small},
+    algorithm/.style={rectangle, draw, fill=red!10, minimum width=3cm, minimum height=1cm, text centered, font=\small},
+    arrow/.style={-{Stealth[length=2mm]}, thick}
+]
+
+% Instruments
+\node[box] (bfi) {BFI-44};
+\node[box, right=of bfi] (ene) {Eneagrama};
+\node[box, right=of ene] (mbti) {MBTI};
+\node[box, right=of mbti] (soc) {Sociograma};
+\node[box, right=of soc] (pe) {Eval. Pares};
+\node[box, right=of pe] (dem) {Demográficos};
+
+% Intermediate
+\node[tensor, below=0.6cm of bfi] (ocean1) {$\mathbf{v}_{\text{OCEAN}}$};
+\node[tensor, below=0.6cm of ene] (ocean2) {$\mathbf{v}_{\text{OCEAN}}$};
+\node[tensor, below=0.6cm of mbti] (ocean3) {$\mathbf{v}_{\text{OCEAN}}$};
+\node[matrix, below=0.6cm of soc] (Asoc) {$\mathbf{T}^{(\text{soc})}$};
+\node[matrix, below=0.6cm of pe] (Ape) {$\mathbf{T}^{(\text{peval})}$};
+\node[tensor, below=0.6cm of dem] (demvec) {$\mathbf{d}_i$};
+
+% Tensor
+\node[tensor, below=1.2cm of ocean2, xshift=1.5cm, minimum width=4cm] (tensor) {$\boldsymbol{\mathcal{T}} \in \mathbb{R}^{n \times d}$};
+
+% Matrices
+\node[matrix, below=1.2cm of Asoc, xshift=0.5cm, minimum width=3.5cm] (matrices) {$\{\mathbf{T}^{(k)}\} \in [-1,1]^{n \times n}$};
+
+% Algorithm
+\node[algorithm, below=1cm of tensor, xshift=0.5cm] (algo) {Algoritmo Genético\\Multi-criterio};
+
+% Output
+\node[box, below=0.6cm of algo] (output) {$\mathcal{G}^* = \{G_1^*, \ldots, G_m^*\}$};
+
+% Arrows
+\draw[arrow] (bfi) -- (ocean1);
+\draw[arrow] (ene) -- (ocean2);
+\draw[arrow] (mbti) -- (ocean3);
+\draw[arrow] (soc) -- (Asoc);
+\draw[arrow] (pe) -- (Ape);
+\draw[arrow] (dem) -- (demvec);
+
+\draw[arrow] (ocean1) -- (tensor);
+\draw[arrow] (ocean2) -- (tensor);
+\draw[arrow] (ocean3) -- (tensor);
+\draw[arrow] (demvec) -- (tensor);
+
+\draw[arrow] (Asoc) -- (matrices);
+\draw[arrow] (Ape) -- (matrices);
+
+\draw[arrow] (tensor) -- (algo);
+\draw[arrow] (matrices) -- (algo);
+\draw[arrow] (algo) -- (output);
+
+\end{tikzpicture}
+\caption{Diagrama de acoplamiento completo: instrumentos $\to$ estructuras matemáticas $\to$ algoritmo de optimización}
+\end{figure}
+
+%==============================================================================
+\section{Resumen: Tabla de Transformaciones}
+\label{sec:summary}
+%==============================================================================
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llp{3.5cm}cp{2.5cm}}
+\toprule
+\textbf{Instrumento} & \textbf{Entrada} & \textbf{Proceso de Transformación} & \textbf{Salida} & \textbf{Rango} \\
+\midrule
+Eneagrama & Respuestas individuales (Likert) & Acumulación por tipo $\to$ argmax $\to$ mapeo OCEAN $\to$ tabla compatibilidad & $\mathbf{T}^{(\text{ene})} \in \{0,1\}^{n \times n}$ & $\{0, 1\}$ \\
+\midrule
+BFI-44 & Respuestas individuales (Likert) & Reverse scoring $\to$ promedio $\to$ normalización $\to$ distancia euclidiana & $\mathbf{T}^{(\text{bfi})} \in [0,1]^{n \times n}$ & $[0, 1]$ \\
+\midrule
+MBTI & Respuestas dicotómicas (A/B) & Tabulación $\to$ tipo MBTI $\to$ mapeo OCEAN $\to$ compatibilidad & $\mathbf{T}^{(\text{mbti})} \in [0,1]^{n \times n}$ & $[0, 1]$ \\
+\midrule
+Sociograma & Preferencias interrelacionales & Construcción matrices adyacencia $\to$ combinación & $\mathbf{T}^{(\text{soc})} \in [-1,1]^{n \times n}$ & $[-1, +1]$ \\
+\midrule
+Eval.\ de Pares & Evaluaciones multi-criterio & Agregación por evaluado $\to$ normalización $\to$ distancia & $\mathbf{T}^{(\text{peval})} \in [0,1]^{n \times n}$ & $[0, 1]$ \\
+\midrule
+Demográficos & Datos de perfil & Codificación $\to$ normalización & $\mathbf{d}_i \in [0,1]^{d_{\text{dem}}}$ & $[0, 1]$ \\
+\bottomrule
+\end{tabular}
+\caption{Tabla resumen de transformaciones por instrumento}
+\end{table}
+
+%==============================================================================
+\section{Acoplamiento Analítico}
+\label{sec:analytic}
+%==============================================================================
+
+\subsection{Caso Ejemplo: 3 Instrumentos Activos}
+
+Supongamos que para una sección de 20 personas se activan: BFI-44, Sociograma y Demográficos (carrera).
+
+\textbf{Paso 1 --- Perfiles individuales}:
+\[
+\boldsymbol{\tau}_i = \begin{pmatrix} \mathbf{v}_{\text{OCEAN},i} \\ \mathbf{d}_i \end{pmatrix} \in \mathbb{R}^{5 + d_{\text{dem}}}
+\]
+
+\textbf{Paso 2 --- Matrices de afinidad}:
+\begin{align}
+    \mathbf{T}^{(\text{bfi})}_{ij} &= 1 - \frac{\|\mathbf{v}_{\text{OCEAN},i} - \mathbf{v}_{\text{OCEAN},j}\|_2}{\sqrt{5}} \quad \text{(afinidad deducida)} \\
+    \mathbf{T}^{(\text{soc})}_{ij} &= \frac{\mathbf{A}^{(1)}_{ij} + \mathbf{A}^{(2)}_{ij}}{2} \quad \text{(afinidad expuesta)}
+\end{align}
+
+\textbf{Paso 3 --- Fitness multi-criterio}:
+\[
+F(\mathcal{G}) = \underbrace{\omega_1 \cdot f_{\text{bfi}}(\mathcal{G})}_{\text{Psicometría}} + \underbrace{\omega_2 \cdot f_{\text{soc}}(\mathcal{G})}_{\text{Sociometría}} + \underbrace{\lambda_1 \cdot h_{\text{carrera}}(\mathcal{G})}_{\text{Balanceo demográfico}}
+\]
+
+donde:
+\begin{itemize}
+    \item $f_{\text{bfi}}$: Afinidad OCEAN promedio intra-grupo (afinidad deducida)
+    \item $f_{\text{soc}}$: Cohesión sociométrica intra-grupo (afinidad expuesta)
+    \item $h_{\text{carrera}}$: Índice de Blau para diversidad de carrera (tensor de características)
+\end{itemize}
+
+\textbf{Paso 4 --- Restricciones}:
+\begin{align}
+    & \mathbf{V}_{ij} = 0 \quad \forall\, i, j \in G_g \quad \text{(sin vetos intra-grupo)} \\
+    & |G_g| \in [3, 5] \quad \forall\, g \quad \text{(tamaño controlado)}
+\end{align}
+
+\subsection{Fórmula de Costo Relacional (Tesis)}
+
+Para el caso general con $P$ providers de afinidad:
+
+\[
+C'_{ij} = \frac{\sum_{p=1}^{P} \omega_p \cdot (1 - S_p \cdot T_p(i,j))}{2}
+\]
+
+\[
+S_{\text{rel}}(G) = \min\left(1, \frac{\sum_{i<j \in G} C'_{ij}}{|G|(|G|-1)/2}\right)
+\]
+
+\[
+f_2(x) = \frac{1}{m} \sum_{g=1}^{m} S_{\text{rel}}(G_g)
+\]
+
+donde $S_p \in \{-1, +1\}$ es la intencionalidad social del provider $p$.
+
+%==============================================================================
+\section{Código Fuente de Referencia}
+\label{sec:code}
+%==============================================================================
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Componente} & \textbf{Ruta en el repositorio} \\
+\midrule
+Tipo OCEANVector & \texttt{internal/core/domain/ocean.go} \\
+Fitness psicométrico & \texttt{internal/core/domain/fitness.go} \\
+Fitness sociométrico & \texttt{internal/core/sociometry.go} \\
+AffinityProvider & \texttt{internal/core/affinity\_provider.go} \\
+TeamFormationEngine & \texttt{internal/core/team\_formation\_engine.go} \\
+Cálculo costo relacional & \texttt{internal/core/affinity\_provider.go:247} \\
+BFI-44 calculator & \texttt{plugins\_src/bfi44/calculator.go} \\
+Eneagrama OCEAN mapping & \texttt{plugins\_src/enneagram/enneagram\_ocean.go} \\
+Eneagrama compatibilidad & \texttt{plugins\_src/enneagram/enneagram\_ocean.go:28} \\
+MBTI OCEAN mapping & \texttt{plugins\_src/mbti/ocean.go} \\
+Sociograma & \texttt{plugins\_src/sociogram/main.go} \\
+Eval.\ de Pares & \texttt{plugins\_src/peer\_evaluation/responses.go} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
